@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Content Detector</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        .gradient-bg {
+            background: linear-gradient(135deg, #1e3a8a 0%, #3730a3 100%);
+        }
+        .glass-effect {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+        }
+        @media (max-width: 768px) {
+            .glass-effect {
+                backdrop-filter: none;
+                background: white;
+            }
+        }
+    </style>
+</head>
+
+<body class="min-h-screen gradient-bg">
+    <nav class="bg-white shadow-lg">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between h-16">
+                <div class="flex">
+                    <div class="flex-shrink-0 flex items-center">
+                        <h1 class="text-xl font-bold text-gray-800">AI Detector</h1>
+                    </div>
+                </div>
+                <div class="flex items-center">
+                    <a href="/detector2" class="text-gray-600 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium">
+                        Try Enhanced Detector
+                    </a>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container mx-auto px-4 py-8">
+        <div class="max-w-4xl mx-auto">
+            <div class="text-center mb-8">
+                <h2 class="text-4xl font-bold mb-4 text-white">AI Content Detection</h2>
+                <p class="text-xl text-white opacity-90">Analyze your text using advanced NLP techniques</p>
+            </div>
+            
+            <div class="glass-effect rounded-xl shadow-2xl p-8 space-y-6">
+                <div class="flex flex-wrap gap-4 items-center mb-6">
+                    <button id="pasteBtn" class="flex items-center px-4 py-2 bg-blue-100 hover:bg-blue-200 text-blue-700 rounded-lg transition duration-200">
+                        Paste Text
+                    </button>
+                    <button id="clearBtn" class="flex items-center px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg transition duration-200">
+                        Clear
+                    </button>
+                    <div class="ml-auto text-sm text-gray-500" id="wordCount">0 words</div>
+                </div>
+
+                <div class="relative">
+                    <textarea id="content" class="w-full h-48 p-4 border-2 border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none" 
+                        placeholder="Paste your text here to analyze..."></textarea>
+                    <div id="loading" class="absolute inset-0 bg-white bg-opacity-90 flex items-center justify-center hidden">
+                        <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
+                    </div>
+                </div>
+
+                <button id="detectBtn" class="w-full bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-xl transition duration-200 text-lg font-semibold">
+                    Analyze Text
+                </button>
+
+                <div id="result" class="hidden space-y-6">
+                    <div class="bg-gray-50 p-6 rounded-xl">
+                        <h3 class="text-2xl font-bold mb-6 text-center">Analysis Results</h3>
+                        
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                            <div class="bg-white p-4 rounded-lg shadow">
+                                <div class="text-center">
+                                    <div class="text-gray-600 mb-2">AI Probability</div>
+                                    <div id="probability" class="text-3xl font-bold text-blue-600"></div>
+                                    <div class="w-full bg-gray-200 rounded-full h-2 mt-2">
+                                        <div id="probability-bar" class="bg-blue-600 h-2 rounded-full transition-all duration-500"></div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="bg-white p-4 rounded-lg shadow">
+                                <canvas id="analysisChart"></canvas>
+                            </div>
+                        </div>
+
+                        <div id="verdict" class="text-center text-lg font-medium p-4 rounded-lg mb-6"></div>
+
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <div class="bg-white p-4 rounded-lg shadow">
+                                <h4 class="font-semibold mb-4">AI Indicators</h4>
+                                <div id="indicators" class="space-y-3"></div>
+                            </div>
+                            <div class="bg-white p-4 rounded-lg shadow">
+                                <h4 class="font-semibold mb-4">Text Statistics</h4>
+                                <div id="statistics" class="space-y-2"></div>
+                            </div>
+                        </div>
+
+                        <div class="bg-white p-4 rounded-lg shadow mt-6">
+                            <h4 class="font-semibold mb-4">Probability Adjustments</h4>
+                            <div id="adjustments" class="space-y-2"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Get the current window location for API URL
+        const API_URL = `${window.location.protocol}//${window.location.host}/api/detect`;
+        console.log('Using API URL:', API_URL);
+
+        const content = document.getElementById('content');
+        const detectBtn = document.getElementById('detectBtn');
+        const pasteBtn = document.getElementById('pasteBtn');
+        const clearBtn = document.getElementById('clearBtn');
+        const resultDiv = document.getElementById('result');
+        const probabilitySpan = document.getElementById('probability');
+        const probabilityBar = document.getElementById('probability-bar');
+        const verdictP = document.getElementById('verdict');
+        const wordCount = document.getElementById('wordCount');
+        const loading = document.getElementById('loading');
+        let chart = null;
+
+        content.addEventListener('input', () => {
+            const words = content.value.trim().split(/\s+/).filter(word => word.length > 0);
+            wordCount.textContent = `${words.length} words`;
+        });
+
+        pasteBtn.addEventListener('click', async () => {
+            try {
+                const text = await navigator.clipboard.readText();
+                content.value = text;
+                content.dispatchEvent(new Event('input'));
+            } catch (err) {
+                alert('Unable to access clipboard. Please paste manually.');
+            }
+        });
+
+        clearBtn.addEventListener('click', () => {
+            content.value = '';
+            content.dispatchEvent(new Event('input'));
+            resultDiv.classList.add('hidden');
+        });
+
+        function initChart(probability) {
+            const ctx = document.getElementById('analysisChart').getContext('2d');
+            if (chart) {
+                chart.destroy();
+            }
+            chart = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: ['AI Generated', 'Human Written'],
+                    datasets: [{
+                        data: [probability, 100 - probability],
+                        backgroundColor: ['#2563eb', '#e5e7eb'],
+                        borderColor: ['#2563eb', '#e5e7eb'],
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    cutout: '70%',
+                    plugins: {
+                        legend: {
+                            position: 'bottom'
+                        }
+                    }
+                }
+            });
+        }
+
+        function updateIndicators(indicators) {
+            const indicatorsDiv = document.getElementById('indicators');
+            indicatorsDiv.innerHTML = '';
+
+            Object.entries(indicators).forEach(([name, value]) => {
+                const formattedName = name.split('_').map(word => 
+                    word.charAt(0).toUpperCase() + word.slice(1)
+                ).join(' ');
+
+                const div = document.createElement('div');
+                div.innerHTML = `
+                    <div class="flex justify-between items-center mb-1">
+                        <span class="text-gray-700">${formattedName}</span>
+                        <span class="text-sm text-gray-500">${value}%</span>
+                    </div>
+                    <div class="w-full bg-gray-200 rounded-full h-1.5">
+                        <div class="bg-blue-600 h-1.5 rounded-full" style="width: ${value}%"></div>
+                    </div>
+                `;
+                indicatorsDiv.appendChild(div);
+            });
+        }
+
+        function updateStatistics(statistics) {
+            const statsDiv = document.getElementById('statistics');
+            statsDiv.innerHTML = '';
+
+            Object.entries(statistics).forEach(([name, value]) => {
+                const formattedName = name.split('_').map(word => 
+                    word.charAt(0).toUpperCase() + word.slice(1)
+                ).join(' ');
+
+                const div = document.createElement('div');
+                div.className = 'flex justify-between items-center';
+                div.innerHTML = `
+                    <span class="text-gray-700">${formattedName}</span>
+                    <span class="text-sm font-medium text-gray-500">
+                        ${typeof value === 'number' ? value.toFixed(2) : value}
+                    </span>
+                `;
+                statsDiv.appendChild(div);
+            });
+        }
+
+        function updateAdjustments(adjustments) {
+            const adjustmentsDiv = document.getElementById('adjustments');
+            adjustmentsDiv.innerHTML = '';
+
+            Object.entries(adjustments).forEach(([name, value]) => {
+                const formattedName = name.split('_').map(word => 
+                    word.charAt(0).toUpperCase() + word.slice(1)
+                ).join(' ');
+
+                const div = document.createElement('div');
+                div.className = 'flex justify-between items-center';
+                const textColor = value > 0 ? 'text-green-600' : 'text-gray-500';
+                div.innerHTML = `
+                    <span class="text-gray-700">${formattedName}</span>
+                    <span class="text-sm font-medium ${textColor}">
+                        ${value > 0 ? '+' : ''}${value}%
+                    </span>
+                `;
+                adjustmentsDiv.appendChild(div);
+            });
+        }
+
+        detectBtn.addEventListener('click', async () => {
+            const text = content.value;
+
+            if (!text.trim()) {
+                alert('Please enter some text to analyze');
+                return;
+            }
+
+            try {
+                loading.classList.remove('hidden');
+                detectBtn.disabled = true;
+                detectBtn.classList.add('opacity-50');
+
+                console.log('Sending request to API with text:', text.substring(0, 100) + '...');
+
+                const response = await fetch(API_URL, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json'
+                    },
+                    body: JSON.stringify({ text: text })
+                });
+
+                console.log('Response status:', response.status);
+                
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    throw new Error(`Server responded with status ${response.status}: ${errorText}`);
+                }
+
+                const data = await response.json();
+                console.log('Response data:', data);
+
+                if (data.error) {
+                    throw new Error(data.error);
+                }
+
+                const result = data.result;
+                const probability = result.ai_probability;
+
+                resultDiv.classList.remove('hidden');
+                probabilitySpan.textContent = `${probability}%`;
+                probabilityBar.style.width = `${probability}%`;
+
+                if (probability > 50) {
+                    verdictP.textContent = 'This text was likely generated by AI';
+                    verdictP.className = 'text-center text-lg font-medium p-4 rounded-lg bg-red-50 text-red-600';
+                } else {
+                    verdictP.textContent = 'This text was likely written by a human';
+                    verdictP.className = 'text-center text-lg font-medium p-4 rounded-lg bg-green-50 text-green-600';
+                }
+
+                initChart(probability);
+                updateIndicators(result.indicators);
+                updateStatistics(result.statistics);
+                updateAdjustments(result.adjustments);
+
+                resultDiv.scrollIntoView({ behavior: 'smooth' });
+
+            } catch (error) {
+                console.error('Error analyzing text:', error);
+                alert('Error analyzing text: ' + error.message + '\nPlease check the browser console for more details.');
+            } finally {
+                loading.classList.add('hidden');
+                detectBtn.disabled = false;
+                detectBtn.classList.remove('opacity-50');
+            }
+        });
+    </script>
+</body>
+
+</html>
